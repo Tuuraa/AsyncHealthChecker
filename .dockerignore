@@ -1,0 +1,11 @@
+**/bin
+**/obj
+
+AsyncHealthChecker.Tests/
+coverage-report/
+
+.git/
+.gitignore
+
+Dockerfile
+docker-compose.yml

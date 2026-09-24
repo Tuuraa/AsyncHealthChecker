@@ -1,0 +1,40 @@
+services:
+  api:
+    image: async-health-checker
+    container_name: async-health-checker-api
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=healthchecker;Username=postgres;Password=postgres"
+      ConnectionStrings__Redis: "redis:6379"
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:17
+    container_name: async-health-checker-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: healthchecker
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+  
+  redis:
+    image: redis:7
+    container_name: async-health-checker-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  redis_data:
+  postgres_data:
