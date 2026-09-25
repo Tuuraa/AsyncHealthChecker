@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
 using AsyncHealthChecker.Api.Workers;
-using AsyncHealthChecker.Application.Services.Implementations;
-using AsyncHealthChecker.Application.Services.Interfaces;
+using AsyncHealthChecker.Application.Interfaces;
+using AsyncHealthChecker.Application.Services;
 using AsyncHealthChecker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
@@ -47,6 +47,11 @@ public static class ServiceExtensions
                 Title = "Async Health Checker API",
                 Version = "v1"
             });
+        });
+        
+        services.Configure<HostOptions>(options =>
+        {
+            options.ShutdownTimeout = TimeSpan.FromSeconds(35);
         });
         
         return services;

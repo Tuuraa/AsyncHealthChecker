@@ -1,12 +1,12 @@
 using AsyncHealthChecker.Api.DTOs.Responses;
-using AsyncHealthChecker.Application.Services.Interfaces;
+using AsyncHealthChecker.Application.Interfaces;
 using AsyncHealthChecker.Domain.Entities;
 using AsyncHealthChecker.Domain.Enums;
 using AsyncHealthChecker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace AsyncHealthChecker.Application.Services.Implementations;
+namespace AsyncHealthChecker.Application.Services;
 
 public class TaskService : ITaskService
 {

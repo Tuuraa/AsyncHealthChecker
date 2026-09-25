@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using AsyncHealthChecker.Application.Services.Implementations;
+using AsyncHealthChecker.Application.Services;
 
 namespace AsyncHealthChecker.Api.Middlewares;
 

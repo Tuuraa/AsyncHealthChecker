@@ -19,5 +19,9 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<CheckTask>()
             .HasKey(t => t.TaskId);
+        
+        modelBuilder.Entity<CheckResult>()
+            .HasIndex(r => new { r.TaskId, r.Url })
+            .IsUnique();
     }
 }

@@ -1,6 +1,6 @@
 using AsyncHealthChecker.Api.DTOs;
 using AsyncHealthChecker.Application.DTOs;
-using AsyncHealthChecker.Application.Services.Interfaces;
+using AsyncHealthChecker.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AsyncHealthChecker.Api.Controllers;

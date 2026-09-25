@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using AsyncHealthChecker.Application.Services.Implementations;
-using AsyncHealthChecker.Application.Services.Interfaces;
+using AsyncHealthChecker.Application.Services;
+using AsyncHealthChecker.Application.Interfaces;
 using AsyncHealthChecker.Domain.Entities;
 using AsyncHealthChecker.Domain.Enums;
 using AsyncHealthChecker.Infrastructure.Data;
@@ -12,11 +12,12 @@ public class HealthCheckWorker : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<HealthCheckWorker> _logger;
-    
-    private readonly SemaphoreSlim _semaphore = new (20);
-    
-    private static readonly TimeSpan PollDelay = TimeSpan.FromSeconds(1);
-    
+
+    private readonly SemaphoreSlim _semaphore = new(20);
+
+    private static readonly TimeSpan PollDelay =
+        TimeSpan.FromSeconds(1);
+
     public HealthCheckWorker(
         IServiceProvider serviceProvider,
         ILogger<HealthCheckWorker> logger)
@@ -24,22 +25,32 @@ public class HealthCheckWorker : BackgroundService
         _serviceProvider = serviceProvider;
         _logger = logger;
     }
-    
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+
+    protected override async Task ExecuteAsync(
+        CancellationToken stoppingToken)
     {
         MetricsService.ActiveWorkers.Set(1);
 
         _logger.LogInformation(
             "HealthCheckWorker started, active_workers = 1");
 
+        using (var scope = _serviceProvider.CreateScope())
+        {
+            var queue = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
+            await queue.RecoverAbandonedTasks();
+        }
+        
         try
         {
+            
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
                     using var scope = _serviceProvider.CreateScope();
-                    var queue = scope.ServiceProvider.GetRequiredService<IMessageQueueService>();
+
+                    var queue = scope.ServiceProvider
+                        .GetRequiredService<IMessageQueueService>();
 
                     var message = await queue.DequeueTask(stoppingToken);
 
@@ -51,6 +62,8 @@ public class HealthCheckWorker : BackgroundService
 
                     await ProcessTask(message, stoppingToken);
 
+                    await queue.AcknowledgeTask(message.TaskId);
+
                     MetricsService.TasksProcessed.Inc();
                 }
                 catch (OperationCanceledException)
@@ -59,7 +72,9 @@ public class HealthCheckWorker : BackgroundService
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Unhandled error in worker loop");
+                    _logger.LogError(
+                        ex,
+                        "Unhandled error in worker loop");
                 }
             }
         }
@@ -71,31 +86,61 @@ public class HealthCheckWorker : BackgroundService
                 "HealthCheckWorker stopped, active_workers = 0");
         }
     }
-    
-    private async Task ProcessTask(TaskQueueMessage message, CancellationToken stoppingToken)
+
+    private async Task ProcessTask(
+        TaskQueueMessage message,
+        CancellationToken stoppingToken)
     {
         using var scope = _serviceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
-        
+
+        var db = scope.ServiceProvider
+            .GetRequiredService<AppDbContext>();
+
+        var httpClientFactory = scope.ServiceProvider
+            .GetRequiredService<IHttpClientFactory>();
+
         _logger.LogInformation(
             "Processing task {TaskId} with {UrlCount} urls",
-            message.TaskId, message.Urls.Count);
+            message.TaskId,
+            message.Urls.Count);
 
         var currentTask = await db.CheckTasks
-            .FirstOrDefaultAsync(c => c.TaskId == message.TaskId, stoppingToken);
+            .FirstOrDefaultAsync(
+                c => c.TaskId == message.TaskId,
+                stoppingToken);
 
-        if (currentTask is null) return;
+        if (currentTask is null)
+        {
+            _logger.LogWarning(
+                "Task {TaskId} not found in database",
+                message.TaskId);
+
+            return;
+        }
 
         try
         {
             currentTask.Status = CheckTaskStatus.Processing;
-            await db.SaveChangesAsync(stoppingToken);
-        
-            var tasks = message.Urls
-                .Select(url => CheckUrlAsync(url, message.TaskId, httpClientFactory, stoppingToken))
-                .ToList();
 
+            await db.SaveChangesAsync(stoppingToken);
+
+            var existingUrls = await db.CheckResults
+                .Where(r => r.TaskId == message.TaskId)
+                .Select(r => r.Url)
+                .ToListAsync(stoppingToken);
+
+            var processedSet = new HashSet<string>(existingUrls);
+            
+            var urlsToProcess = message.Urls.Where(u => !processedSet.Contains(u)).ToList();
+            
+            var tasks = urlsToProcess
+                .Select(url => CheckUrlAsync(
+                    url, 
+                    message.TaskId, 
+                    httpClientFactory, 
+                    stoppingToken))
+                .ToList();
+            
             while (tasks.Count > 0)
             {
                 var finished = await Task.WhenAny(tasks);
@@ -106,7 +151,8 @@ public class HealthCheckWorker : BackgroundService
                 MetricsService.UrlsChecked
                     .WithLabels(result.IsAvailable ? "true" : "false")
                     .Inc();
-                
+
+
                 db.CheckResults.Add(result);
                 await db.SaveChangesAsync(stoppingToken);
             }
@@ -114,14 +160,24 @@ public class HealthCheckWorker : BackgroundService
             currentTask.Status = CheckTaskStatus.Completed;
             await db.SaveChangesAsync(stoppingToken);
         }
+        catch (OperationCanceledException)
+            when (stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Task {TaskId} interrupted by system shutdown. It will be retried automatically.", message.TaskId);
+    
+            throw;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Task {TaskId} failed", message.TaskId);
+            _logger.LogError(
+                ex,
+                "Task {TaskId} failed",
+                message.TaskId);
 
-            currentTask.Status = CheckTaskStatus.Failed; 
+            currentTask.Status = CheckTaskStatus.Failed;
+
             await db.SaveChangesAsync(CancellationToken.None);
         }
-        
     }
 
     private async Task<CheckResult> CheckUrlAsync(
@@ -131,7 +187,7 @@ public class HealthCheckWorker : BackgroundService
         CancellationToken stoppingToken)
     {
         await _semaphore.WaitAsync(stoppingToken);
-        
+
         var client = httpClientFactory.CreateClient();
         client.Timeout = TimeSpan.FromSeconds(10);
 
@@ -139,7 +195,9 @@ public class HealthCheckWorker : BackgroundService
 
         try
         {
-            var response = await client.GetAsync(url, stoppingToken);
+            var response = await client.GetAsync(
+                url,
+                stoppingToken);
 
             stopwatch.Stop();
 
@@ -154,7 +212,8 @@ public class HealthCheckWorker : BackgroundService
                 CheckedAt = DateTime.UtcNow
             };
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        catch (OperationCanceledException)
+            when (stoppingToken.IsCancellationRequested)
         {
             throw;
         }
@@ -163,8 +222,10 @@ public class HealthCheckWorker : BackgroundService
             stopwatch.Stop();
 
             _logger.LogWarning(
-                "Failed to check {Url} for task {TaskId}: {Error}",
-                url, taskId, ex.Message);
+                "Failed to check URL {Url} for task {TaskId}: {Error}",
+                url,
+                taskId,
+                ex.Message);
 
             return new CheckResult
             {

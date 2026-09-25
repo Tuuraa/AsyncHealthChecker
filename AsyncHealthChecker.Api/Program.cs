@@ -24,7 +24,12 @@ public class Program
         }
         
         app.UseSwagger();
-        app.UseSwaggerUI();
+
+        app.UseSwaggerUI(options =>
+        {
+            options.RoutePrefix = "docs";
+            options.SwaggerEndpoint("/swagger/v1/swagger.json", "API v1");
+        });
 
         app.UseMiddleware<MetricsMiddleware>();
         

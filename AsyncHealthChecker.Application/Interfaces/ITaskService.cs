@@ -1,7 +1,7 @@
 using AsyncHealthChecker.Api.DTOs.Responses;
 using AsyncHealthChecker.Domain.Entities;
 
-namespace AsyncHealthChecker.Application.Services.Interfaces;
+namespace AsyncHealthChecker.Application.Interfaces;
 
 public interface ITaskService
 {

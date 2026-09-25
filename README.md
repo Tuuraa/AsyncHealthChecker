@@ -10,7 +10,7 @@
 ### Запуск в Docker Compose
 
 ```bash
-git clone <URL-репозитория> AsyncHealthChecker
+git clone https://github.com/Tuuraa/AsyncHealthChecker.git AsyncHealthChecker
 cd AsyncHealthChecker
 
 docker compose up -d --build   
@@ -20,8 +20,8 @@ docker compose ps
 После старта:
 
 | Что                | Адрес                         |
-| ------------------ | ----------------------------- |
-| Swagger UI         | http://localhost:8080/swagger |
+| ------------------ |-------------------------------|
+| Swagger UI         | http://localhost:8080/docs    |
 | Метрики Prometheus | http://localhost:8080/metrics |
 
 Миграции БД применяются автоматически при старте приложения, вручную ничего создавать не нужно.
@@ -41,7 +41,7 @@ docker compose up -d postgres redis
 dotnet run --project AsyncHealthChecker.Api
 ```
 
-Приложение будет доступно на **http://localhost:5245** (Swagger: http://localhost:5245/swagger).
+Приложение будет доступно на **http://localhost:5245** (Swagger: http://localhost:5245/docs).
 
 > В Docker порт API — **8080**, при локальном запуске — **5245**.
 

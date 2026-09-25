@@ -1,6 +1,6 @@
 using Prometheus;
 
-namespace AsyncHealthChecker.Application.Services.Implementations;
+namespace AsyncHealthChecker.Application.Services;
 
 public static class MetricsService
 {
